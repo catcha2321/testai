@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+    <title>AIテスト（学習回数150回、データ数3回）</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <style>
+        .container {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .input-section {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-container {
+            text-align: center;
+        }
+
+        canvas {
+            max-width: 400px;
+            max-height: 300px;
+        }
+
+        .chart-text {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="input-section">
+            <!-- 入力ボックス -->
+            <input type="number" min="1" max="10" id="input0">
+            <input type="number" min="1" max="10" id="input1">
+            <input type="number" min="1" max="10" id="input2">
+            <input type="number" min="1" max="10" id="input3">
+            <input type="number" min="1" max="10" id="input4">
+            <input type="number" min="1" max="10" id="input5">
+            <input type="number" min="1" max="10" id="input6">
+            <input type="number" min="1" max="10" id="input7">
+            <input type="number" min="1" max="10" id="input8">
+            <input type="number" min="1" max="10" id="input9">
+            <!-- ボタン -->
+            <button onclick="updateChart()">更新</button>
+            <!-- 合計 -->
+            <div id="total">相手の出したやつ: -</div>
+        </div>
+        <div class="chart-container">
+            <canvas id="barChart"></canvas>
+            <!-- グラフの下に表示するテキスト -->
+            <div class="chart-text" id="chartText">グラフに反映する値を入力してください</div>
+        </div>
+    </div>
+
+    <script>
+        let aite = [];
+        // 初期データ（空の状態）
+        const initialValues = Array(10).fill(null);
+        const ctx = document.getElementById('barChart').getContext('2d');
+
+        // Chart.js 棒グラフの設定
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Array.from({ length: 10 }, (_, i) => `${i + 1}`), // ラベル
+                datasets: [{
+                    label: '入力値',
+                    data: initialValues.map(v => (v === null ? 0 : v)), // null を 0 として扱う
+                    backgroundColor: 'skyblue',
+                    borderColor: 'blue',
+                    borderWidth: 1,
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 1 // 入力値の最大値
+                    }
+                }
+            }
+        });
+
+        // 棒グラフの更新関数
+        async function updateChart() {
+            let values = [];
+            let aitenokazu = 0;
+            let hasValidInput = false;
+            let tmp = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            // 入力値を取得
+            for (let i = 0; i < 10; i++) {
+                const inputElement = document.getElementById(`input${i}`);
+                const value = parseInt(inputElement.value, 10);
+                if (!isNaN(value) && value >= 1 && value <= 10) {
+                    tmp[value] = 1;
+                    hasValidInput = true;
+                } else {
+                }
+            }
+            for (let i = 0; i < aite.length; i++) {
+                tmp[aite[i]] = 1;
+            }
+            console.log(tmp);
+            values = await runModel(tmp);
+            console.log(values);
+            let saidaiti = 0;
+            for (let i = 0; i < 10; i++) {
+                if (values[i] > saidaiti && !aite.includes(i+1)) {
+                    saidaiti = values[i];
+                    aitenokazu = i+1;
+                }
+            }
+            aite.push(aitenokazu);
+            // 合計値を更新（有効な入力がない場合は `-` を表示）
+            document.getElementById('total').textContent = `相手の出したやつ: ${aitenokazu}`;
+            document.getElementById('chartText').textContent = `相手の過去のカード: ${aite}`;
+
+            // 棒グラフデータの更新
+            chart.data.datasets[0].data = values;
+            chart.update();
+        }
+        async function runModel(inputData) {
+            // モデルをロード
+            const model = await tf.loadLayersModel('tfjs_model/model.json');
+
+            // 入力データをテンソルに変換
+            const input = tf.tensor2d([inputData]);
+
+            // 推論を実行
+            const output = model.predict(input);
+
+            // 結果をJavaScript配列に変換して返す
+            const result = output.arraySync()[0];
+
+            return result;
+        }
+        updateChart();
+    </script>
+</body>
+</html>
