@@ -57,7 +57,7 @@
         <div class="chart-container">
             <canvas id="barChart"></canvas>
             <!-- グラフの下に表示するテキスト -->
-            <div class="chart-text" id="chartText">グラフに反映する値を入力してください</div>
+            <div class="chart-text" id="chartText">相手の過去のカード</div>
         </div>
     </div>
 
@@ -101,13 +101,13 @@
                 const inputElement = document.getElementById(`input${i}`);
                 const value = parseInt(inputElement.value, 10);
                 if (!isNaN(value) && value >= 1 && value <= 10) {
-                    tmp[value] = 1;
+                    tmp[value+9] = 1;
                     hasValidInput = true;
                 } else {
                 }
             }
             for (let i = 0; i < aite.length; i++) {
-                tmp[aite[i]] = 1;
+                tmp[aite[i]-1] = 1;
             }
             console.log(tmp);
             values = await runModel(tmp);
