@@ -1,0 +1,863 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="icon" type="image/png" href="/1.jpg">
+    <!-- その他アプリ設定 -->
+    <link rel="shortcut icon" type="image/png" href="/1.jpg">
+    <!-- androidアプリ設定 -->
+    <link rel="icon" type="image/png" href="/1.jpg" sizes="192x192">
+    <!-- iphoneアプリ設定 -->
+    <link rel="apple-touch-icon" href="/1.jpg" sizes="180x180">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="カード!!!">
+    <meta charset="UTF-8">
+    <title>カードゲームβ</title>
+    <script src="./phaser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        /* TTFフォントをCSSで読み込む */
+        @font-face {
+            font-family: 'CustomFont'; /* フォント名 */
+            src: url('./g_comichorrorR_freeR.ttf') format('truetype');
+        }
+    </style>
+</head>
+<body>
+    <script>
+        let originalY = [];
+        const config = {
+            type: Phaser.AUTO,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            backgroundColor: '#2d2d2d',
+            scene: {
+                preload: preload,
+                create: create,
+                resize: resize
+            }
+        };
+
+        const game = new Phaser.Game(config);
+        
+        let cards = [];
+        let cardsline = [];
+        let enter;
+        let sentakutyuucard = "notdata"
+        let sentakutyuucardyou = "notdata"
+        let dialoghyouzityuu = "no"
+        let mycards = [];
+        let mycard;
+        let yourcards = [];
+        let yourcard;
+        let myscore=0;
+        let youscore = 0;
+        let myready = false;
+        let youready = false;
+        let whoiswinner = "";
+        let truefalse = false;
+
+        const cardWidth = 100;
+        const cardHeight = 150;
+        const margin = 20;
+        const cardImages = [
+            'card1', 'card2', 'card3', 'card4', 'card5',
+            'card6', 'card7', 'card8', 'card9', 'card10'
+        ];
+
+        let timerText; // タイマーを表示するテキスト
+        let countdown = 30; // カウントダウンの初期値（秒）
+        let timerEvent;
+        let waitnowback;
+        let waitnowtext;
+        let tenten=1;
+
+        function preload() {
+            // カードの画像を読み込む
+            for (var i = 0; i < cardImages.length; i++) {
+                this.load.image(cardImages[i], `./${i + 1}.jpg`);
+            }
+            this.load.image("cardura", `./ura.jpg`);
+            for(var i = 1;i<=10;i++){
+                for(var j = 1;j<=58;j=j+5){
+                    this.load.image(i.toString()+"-"+j.toString(), `./cardanim/${i}/${j}.png`);
+                }
+            }
+            this.load.image('particle', './ryuusi.png'); // パーティクル用の画像をロード
+            //エンターキーの画像を読み込む
+            this.load.image("enter", `./enter.png`);
+        }
+
+        async function create() {
+            for (let i = 0; i < 10; i++) {
+                //背景用枠
+                const cardline = this.add.graphics();
+                cardline.lineStyle(3, 0xffffff, 1); // 線の色 (白) と不透明度 (1)
+                //adjustCardsで処理↓
+                //cardline.strokeRect(x, y, cardWidth*1.1, cardHeight*1.1); // 矩形を枠として描画
+                cardsline.push(cardline);
+                //カード本体
+                const x = i * (cardWidth + margin) + margin;
+                const y = window.innerHeight - cardHeight - margin;
+                const card = this.add.image(x, y, cardImages[i]).setInteractive();
+                card.setDisplaySize(cardWidth, cardHeight); // サイズを一定に保つ
+                card.cardIndex = i; // カード番号を保存
+                cards.push(card);
+
+                // カードクリック時の処理
+                card.on('pointerdown', () => {
+                    if (dialoghyouzityuu == "no") {
+                        onCardClick(card, this);
+                    }
+                });
+                card.on('pointerover', () => {
+                    if (card.zyoutai == 0) {
+                        up(card, this);
+                    }
+                });
+                card.on('pointerout', () => {
+                    if (card.zyoutai == 0) {
+                        down(card, this);
+                    }
+                });
+
+            }
+
+            // タイマー表示用のテキストを作成
+            timerText = this.add.text(window.innerWidth / 10, window.innerHeight/3, `Time: ${countdown}`, {
+                font: window.innerWidth/25 +'px Arial',
+                fill: '#ffffff',
+            });
+            timerText.setOrigin(0.5, 0.5);
+            // 1秒ごとにカウントダウンを行うタイマーを設定
+            timerEvent = this.time.addEvent({
+                delay: 1000, // 1秒ごとに実行
+                callback: updateTimer,
+                callbackScope: this,
+                loop: true,
+            });
+            //待機中テキスト背景
+            waitnowback = this.add.graphics();
+            waitnowback.fillStyle(0xff0000, 1); // 色 (青) と不透明度 (1)
+            waitnowback.fillRect(0, window.innerHeight/2-50, window.innerWidth, 100);
+            waitnowtext = this.add.text(window.innerWidth / 2, (window.innerHeight/2-50) + (100 / 2), 'text', {
+                font: '32px CustomFont',
+                color: '#000000',
+            });
+            waitnowtext.setOrigin(0.5, 0.5);
+            waitnowback.setVisible(false); // グラフィックスの表示を切り替え
+            waitnowtext.setVisible(false); // テキストの表示を切り替え
+            waitnowback.setDepth(999);
+            waitnowtext.setDepth(1000);
+            this.time.addEvent({
+                delay: 1000, // 2秒ごとに実行
+                callback: updateText,
+                callbackScope: this,
+                loop: true, // 繰り返し実行
+            });
+            //得点（ごみ）
+            youpoint = this.add.graphics();
+            youpoint.fillStyle(0x0000ff, 1); // 色 (青) と不透明度 (1)
+            youpoint.fillRect(0, 0, window.innerWidth, 50);
+            mypoint = this.add.graphics();
+            mypoint.fillStyle(0x0000ff, 1); // 色 (青) と不透明度 (1)
+            mypoint.fillRect(0, 0, window.innerWidth/2, 50);
+            mypoint.pointwidth = window.innerWidth/2;
+            previewscore(1,1,this);
+            //エンターボタン
+            enter = this.add.image(window.innerWidth / 1.1, window.innerHeight / 3, "enter").setInteractive();
+            enter.setDisplaySize((window.innerWidth / 10), (window.innerHeight / 10)); // サイズを一定に保つ
+            enter.on('pointerover', () => {
+                enter.setTint(0x778899);
+                this.tweens.add({
+                    targets: enter,
+                    scaleX: (window.innerWidth / 9) / enter.width, // 幅を100ピクセルに
+                    scaleY: (window.innerHeight / 9) / enter.height,
+                    duration: 250, // 500msで移動
+                    ease: 'Power2', // イージング
+                    repeat: 0
+                });
+            });
+            enter.on('pointerout', () => {
+                enter.clearTint();
+                this.tweens.add({
+                    targets: enter,
+                    scaleX: (window.innerWidth / 10) / enter.width, // 幅を100ピクセルに
+                    scaleY: (window.innerHeight / 10) / enter.height,
+                    duration: 250, // 500msで移動
+                    ease: 'Power2', // イージング
+                });
+            });
+            enter.on('pointerdown', () => {
+                console.log("選択中:" + sentakutyuucard);
+                if (dialoghyouzityuu == "no") {
+                    dialoghyouzityuu = "yes";
+                    if (sentakutyuucard == "notdata") {
+                        Swal.fire({
+                            icon: "error",
+                            title: "エラー",
+                            text: "カードが指定されていません",
+                            //draggable: true,
+                            showDenyButton: true,
+                            //showCancelButton: true,
+                            confirmButtonText: "わかりました",
+                            denyButtonText: `わかりません`,
+                            allowOutsideClick: false
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                Swal.fire("AAA!!!", "", "success");
+                                dialoghyouzityuu = "no";
+                            } else if (result.isDenied) {
+                                Swal.fire("BBB!!!", "", "info");
+                                dialoghyouzityuu = "no";
+                            }
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: "question",
+                            title: sentakutyuucard.toString() + "のカードが選択されています",
+                            text: "カードを確定しますか？",
+                            //draggable: true,
+                            showDenyButton: true,
+                            //showCancelButton: true,
+                            confirmButtonText: "はい",
+                            denyButtonText: `いいえ`,
+                            allowOutsideClick: false
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                //Swal.fire("AAA!!!", "", "success");
+                                dialoghyouzityuu = "no";
+                                kanryou(this);
+                            } else if (result.isDenied) {
+                                //Swal.fire("BBB!!!", "", "info");
+                                dialoghyouzityuu = "no";
+                            }
+                        });
+                    }
+                }
+            });
+
+            // 初期配置を調整
+            adjustCards(this);
+
+            // ウィンドウのリサイズイベントを監視
+            //window.addEventListener('resize', () => resize.call(this));
+            sentakutyuucardyou = await runModel();
+            //sentakutyuucardyou = 10;
+            aitecard(this);
+        }
+
+        function onCardClick(card, that) {
+            console.log(`Clicked card number: ${card.cardIndex}`);
+            sentakutyuucard = card.cardIndex+1;
+            motonoiticard(that);
+            card.zyoutai = 1;
+            //card.setTint(0x555555); // カードを暗くする
+            //card.disableInteractive(); // カードをクリック不可にする
+            that.tweens.add({
+                targets: card,
+                x: window.innerWidth/2.5, // 50ピクセル上に移動
+                y: window.innerHeight/3, // 50ピクセル上に移動
+                duration: 500, // 500msで移動
+                ease: 'Power2', // イージング
+            });
+        }
+        async function kanryou(that) {
+            myready = true;
+            var i = 1;
+            cards.forEach((card) => {
+                card.disableInteractive(); // カードをクリック不可にする
+                if(i!=sentakutyuucard){
+                    card.setTint(0x555555); // カードを暗くする
+                    enter.setTint(0x555555); // カードを暗くする
+                    enter.disableInteractive(); // カードをクリック不可にする
+                }else{
+                    mycard = card;
+                    that.tweens.add({
+                        targets: card,
+                        x: window.innerWidth/2.5, // 50ピクセル上に移動
+                        y: window.innerHeight/3, // 50ピクセル上に移動
+                        duration: 500, // 500msで移動
+                        ease: 'Power2', // イージング
+                    });
+                }
+                i++;
+            });
+            countdown = -100;
+            waitingnow(true, that, "相手を待機中");
+            while (!youready) {
+                await new Promise(resolve => setTimeout(resolve, 100)); // 100ms 待機
+            }
+            waitingnow(false, that, "相手を待機中");
+            //カードアニメーション
+            truefalse = true;
+            var cardanims = { j: 1 };
+            yourcard.setDisplaySize(yourcard.displayWidth * 1.25, yourcard.displayHeight * 1.25);
+            that.tweens.add({
+                targets: cardanims,
+                j: 58,
+                duration: 500,
+                ease: 'Linear',
+                onUpdate: () => {
+                    console.log(Math.floor(cardanims.j / 5) * 5 + 1)
+                    //yourcard.setTexture("1-1");
+                    yourcard.setTexture(sentakutyuucardyou.toString() + "-" + (Math.floor(cardanims.j / 5) * 5 + 1).toString());
+                },
+                onComplete: () => {
+                    truefalse = false;
+                    yourcard.setTexture(cardImages[sentakutyuucardyou - 1]);
+                    yourcard.setDisplaySize(yourcard.displayWidth / 1.25, yourcard.displayHeight / 1.25);
+                }
+            });
+            yourcard.setTexture(cardImages[sentakutyuucardyou - 1]);
+            while (truefalse) {
+                await new Promise(resolve => setTimeout(resolve, 100)); // 100ms 待機
+            }
+            var returndata = winnercheck(sentakutyuucard, sentakutyuucardyou);
+            console.log(returndata)
+            whoiswinner = returndata;
+            if (returndata == "1p") {
+                winnercard(that, "my");
+            }
+            if (returndata == "2p") {
+                winnercard(that, "you");
+            }
+            if (returndata == "draw") {
+                winnercard(that, "draw");
+            }
+            while (youready) {
+                await new Promise(resolve => setTimeout(resolve, 100)); // 100ms 待機
+            }
+            waitingnow(true, that, "次のターン");
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            waitingnow(false, that, "次のターン");
+            //カード復元(効果対応なし)
+            var i = 1;
+            enter.setTint(0xFFFFFF);
+            enter.setInteractive();
+            console.log(before1)
+            console.log(before2)
+            var randtmp = Math.floor(Math.random() * 9 + 1);
+            while (mycards.includes(randtmp)) {
+                randtmp = Math.floor(Math.random() * 9 + 1);
+            }
+            cards.forEach((card) => {
+                if (before2 == 2) {
+                    if (before1 - 2 <= i && before1 + 2 >= i) {
+                        card.setTint(0xFFFFFF);
+                        card.setInteractive();
+
+                    }
+                } else if (before2 == 3 && whoiswinner == "2p") {
+                    if (i == randtmp) {
+                        card.setTint(0xFFFFFF);
+                        waitingnow(true, that, "行動不可能");
+                        console.log("ランダムカード");
+                        onCardClick(card, that);
+
+                    }
+                } else { 
+                    card.setTint(0xFFFFFF);
+                    card.setInteractive();
+
+                }
+                i++;
+            });
+            sentakutyuucardyou = await runModel();
+            aitecard(that);
+            console.log(mycards)
+            console.log(yourcards)
+            countdown = 30; // カウントダウンの初期値（秒）
+            timerEvent = that.time.addEvent({
+                delay: 1000, // 1秒ごとに実行
+                callback: updateTimer,
+                callbackScope: this,
+                loop: true,
+            });
+        }
+        function adjustCards(scene) {
+            const totalWidth = cards.length * (cardWidth + margin);
+            scaleFactor = window.innerWidth / totalWidth * 0.9;
+
+            const offsetX = (window.innerWidth * 1.089 - totalWidth * scaleFactor) / 2;
+            const y = window.innerHeight - cardHeight * scaleFactor - margin;
+            originalY = y;
+            
+            cardsline.forEach((cardline, index) => {
+                const x = offsetX + index * (cardWidth + margin) * scaleFactor;
+                //cardline.strokeRect(x-(cardWidth*1.1 * scaleFactor / 2), y-(cardHeight*1.1 * scaleFactor / 2), cardWidth*1.1 * scaleFactor, cardHeight*1.1 * scaleFactor);
+                cardline.strokeRoundedRect(x-(cardWidth*1.1 * scaleFactor / 2), y-(cardHeight*1.1 * scaleFactor / 2), cardWidth*1.1 * scaleFactor, cardHeight*1.1 * scaleFactor,20);//丸み版
+            });
+
+            cards.forEach((card, index) => {
+                card.zyoutai = 0;
+                const x = offsetX + index * (cardWidth + margin) * scaleFactor;
+                card.setPosition(x, y);
+                card.setDisplaySize(cardWidth * scaleFactor, cardHeight * scaleFactor);
+            });
+        }
+        function motonoiticard(that) {
+            const totalWidth = cards.length * (cardWidth + margin);
+            scaleFactor = window.innerWidth / totalWidth * 0.9;
+
+            const offsetX = (window.innerWidth * 1.089 - totalWidth * scaleFactor) / 2;
+            const y = window.innerHeight - cardHeight * scaleFactor - margin;
+            originalY = y;
+
+            cards.forEach((card, index) => {
+                if (card.zyoutai == 1) {
+                    const x = offsetX + index * (cardWidth + margin) * scaleFactor;
+                    that.tweens.add({
+                        targets: card,
+                        x: x, // 上に移動
+                        y: y, // 上に移動
+                        duration: 500, // 500msで移動
+                        ease: 'Power2', // イージング
+                    });
+                    card.zyoutai = 0;
+                }
+            });
+        }
+        function aitecard(that) {
+            youready = true;
+            //yourcard = that.add.image(0, 0, cardImages[sentakutyuucardyou]);
+            yourcard = that.add.image(0, 0, "cardura");
+            yourcard.rotation = Phaser.Math.DegToRad(180);
+            const totalWidth = cards.length * (cardWidth + margin);
+            scaleFactor = window.innerWidth / totalWidth * 0.9;
+            yourcard.setDisplaySize(cardWidth * scaleFactor, cardHeight * scaleFactor);
+            that.tweens.add({
+                targets: yourcard,
+                rotation: Phaser.Math.DegToRad(-360), // 360度回転
+                x: window.innerWidth / 1.66, // 上に移動
+                duration: 500, // 500msで移動
+                ease: 'Quad.easeOut', // イージング
+            });
+            that.tweens.add({
+                targets: yourcard,
+                y: window.innerHeight / 3, // 上に移動
+                duration: 500, // 500msで移動
+                ease: 'Quad.easeIn', // イージング
+            }); 
+        }
+        function winnercard(that,winner){
+            console.log(window.innerWidth);
+            if(winner=="my"){
+                        that.tweens.add({
+                            targets: yourcard,
+                            y: window.innerHeight/4, // 上に移動
+                            duration: 1000, // 500msで移動
+                            ease: 'Quad.easeOut', // イージング
+                        });
+                        mycard.setDepth(100);
+                        that.tweens.add({
+                            targets: mycard,
+                            y: window.innerHeight/4,
+                            duration: 1000,
+                            ease: 'Quad.easeOut',
+                            onComplete: () => {
+                                that.tweens.add({
+                                    targets: mycard,
+                                    rotation: Phaser.Math.DegToRad(-20),
+                                    scaleX: window.innerWidth/4705,
+                                    scaleY: window.innerWidth/4705,
+                                    duration: 500,
+                                    ease: 'Cubic.easeOut',
+                                    onComplete: () => {
+                                        that.tweens.add({
+                                            targets: mycard,
+                                            x: window.innerWidth/1.81,
+                                            rotation: Phaser.Math.DegToRad(40),
+                                            duration: 100,
+                                            ease: 'Quad.easeOut',
+                                            onComplete: () => {
+                                                cardparticle(that,yourcard);
+                                                that.tweens.add({
+                                                    targets: mycard,
+                                                    x: window.innerWidth/2.5,
+                                                    rotation: Phaser.Math.DegToRad(0),
+                                                    scaleX: window.innerWidth/7525,
+                                                    scaleY: window.innerWidth/7525,
+                                                    duration: 250,
+                                                    ease: 'Quad.easeOut',
+                                                    onComplete: () => {
+                                                        that.tweens.add({
+                                                            targets: mycard,
+                                                            x: 0,
+                                                            y: 0,
+                                                            scaleX: 0,
+                                                            scaleY: 0,
+                                                            rotation: Phaser.Math.DegToRad(720),
+                                                            duration: 500,
+                                                            ease: 'Quad.easeOut',
+                                                            onComplete: () => {
+                                                                myready = false;
+                                                                youready = false;
+                                                            }
+                                                        });
+                                                        myscore++;
+                                                        previewscore(myscore, youscore, that);
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    }
+                                });
+                            }
+                        });
+            }
+            if (winner == "you") {
+                that.tweens.add({
+                    targets: mycard,
+                    y: window.innerHeight / 4, // 上に移動
+                    duration: 1000, // 500msで移動
+                    ease: 'Quad.easeOut', // イージング
+                });
+                yourcard.setDepth(100);
+                that.tweens.add({
+                    targets: yourcard,
+                    y: window.innerHeight / 4,
+                    duration: 1000,
+                    ease: 'Quad.easeOut',
+                    onComplete: () => {
+                        that.tweens.add({
+                            targets: yourcard,
+                            rotation: Phaser.Math.DegToRad(20),
+                            scaleX: window.innerWidth / 4705,
+                            scaleY: window.innerWidth / 4705,
+                            duration: 500,
+                            ease: 'Cubic.easeOut',
+                            onComplete: () => {
+                                that.tweens.add({
+                                    targets: yourcard,
+                                    x: window.innerWidth / 2.22,
+                                    rotation: Phaser.Math.DegToRad(-40),
+                                    duration: 100,
+                                    ease: 'Quad.easeOut',
+                                    onComplete: () => {
+                                        cardparticle(that, mycard);
+                                        that.tweens.add({
+                                            targets: yourcard,
+                                            x: window.innerWidth / 1.66,
+                                            rotation: Phaser.Math.DegToRad(0),
+                                            scaleX: window.innerWidth / 7525,
+                                            scaleY: window.innerWidth / 7525,
+                                            duration: 250,
+                                            ease: 'Quad.easeOut',
+                                            onComplete: () => {
+                                                that.tweens.add({
+                                                    targets: yourcard,
+                                                    x: window.innerWidth,
+                                                    y: 0,
+                                                    scaleX: 0,
+                                                    scaleY: 0,
+                                                    rotation: Phaser.Math.DegToRad(720),
+                                                    duration: 500,
+                                                    ease: 'Quad.easeOut',
+                                                    onComplete: () => {
+                                                        myready = false;
+                                                        youready = false;
+                                                    }
+                                                });
+                                                youscore++;
+                                                previewscore(myscore, youscore, that);
+                                            }
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+            if (winner == "draw") {
+                that.tweens.add({
+                    targets: mycard,
+                    y: window.innerHeight / 4, // 上に移動
+                    duration: 1000, // 500msで移動
+                    ease: 'Quad.easeOut', // イージング
+                });
+                that.tweens.add({
+                    targets: yourcard,
+                    y: window.innerHeight / 4, // 上に移動
+                    duration: 1000, // 500msで移動
+                    ease: 'Quad.easeOut', // イージング
+                });
+                yourcard.setDepth(100);
+                cardparticle(that, mycard);
+                cardparticle(that, yourcard);
+                myready = false;
+                youready = false;
+            }
+
+        }
+        function cardparticle(that,itcard){
+            const particles = that.add.particles('particle'); // パーティクル用の画像を指定
+            // パーティクルエミッターを設定
+            const emitter = particles.createEmitter({
+                x: itcard.x,
+                y: itcard.y,
+                speed: { min: 200, max: 400 }, // パーティクルの速度
+                angle: { min: 0, max: 360 }, // 360度全方向に飛ばす
+                scale: { start: 0.4, end: 0 }, // パーティクルを徐々に小さくする
+                lifespan: 1000, // パーティクルの寿命 (ミリ秒)
+                blendMode: 'ADD', // ブレンドモード
+            });
+            // エフェクトをトリガー
+            that.time.delayedCall(500, () => {
+                // パーティクルを砕け散るように起動
+                emitter.explode(50, itcard.x, itcard.y); // 50個のパーティクルを指定
+                itcard.setVisible(false); // 元の画像を非表示にする
+            });
+        }
+        function waitingnow(a, that, visibletext){
+            if(a){
+                waitnowtext.setText(visibletext);
+                waitnowback.setVisible(true);
+                waitnowtext.setVisible(true);
+                var waitnowbackheight={ x: 0, y: window.innerHeight/2-50, width: window.innerWidth, height: 0 };
+                that.tweens.add({
+                    targets: waitnowbackheight,
+                    height: 100,
+                    duration: 250,
+                    ease: 'Sine.easeOut', // イージング
+                    onUpdate: () => {
+                        waitnowback.clear();
+                        waitnowback.fillStyle(0xff0000, 1);
+                        waitnowback.fillRect(waitnowbackheight.x, waitnowbackheight.y-(waitnowbackheight.height/2)+50, waitnowbackheight.width, waitnowbackheight.height);
+                    },
+                });
+            }else{
+                var waitnowbackheight={ x: 0, y: window.innerHeight/2-50, width: window.innerWidth, height: 100 };
+                that.tweens.add({
+                    targets: waitnowbackheight,
+                    height: 0,
+                    duration: 250,
+                    ease: 'Sine.easeOut', // イージング
+                    onUpdate: () => {
+                        waitnowback.clear();
+                        waitnowback.fillStyle(0xff0000, 1);
+                        waitnowback.fillRect(waitnowbackheight.x, waitnowbackheight.y-(waitnowbackheight.height/2)+50, waitnowbackheight.width, waitnowbackheight.height);
+                    },
+                    onComplete: () => {
+                        waitnowback.setVisible(false);
+                        waitnowtext.setVisible(false);
+                    },
+                });
+            }
+
+        }
+        function previewscore(my,you,that){
+            var mypointmotion={width: mypoint.pointwidth};
+            that.tweens.add({
+                targets: mypointmotion,
+                width: window.innerWidth*(my/(my+you)),
+                duration: 500,
+                ease: 'Quad.easeOut', // イージング
+                onUpdate: () => {
+                    mypoint.clear();
+                    mypoint.fillStyle(0xff0000, 1);
+                    mypoint.fillRect(0, 0, mypointmotion.width, 50);
+                },
+            });
+            mypoint.pointwidth=window.innerWidth*(my/(my+you));
+            //mypoint.clear();
+            //mypoint.fillStyle(0xff0000, 1);
+            //mypoint.fillRect(0, 0, window.innerWidth*(my/(my+you)), 50);
+        }
+        function up(card, that) {
+            that.tweens.add({
+                targets: card,
+                y: card.y - window.innerHeight/25, // 上に移動
+                duration: 100, // 500msで移動
+                ease: 'Power2', // イージング
+            });
+        }
+        function down(card,that) {
+            that.tweens.add({
+                targets: card,
+                y: originalY, // 上に移動
+                duration: 100, // 500msで移動
+                ease: 'Power2', // イージング
+            });
+        }
+
+        function resize() {
+            this.scale.resize(window.innerWidth, window.innerHeight);
+            adjustCards(this);
+        }
+        function updateTimer() {
+            if (countdown > 0) {
+                countdown--;
+                timerText.setText(`Time: ${countdown}`);
+            } else {
+                timerEvent.remove(); // タイマーを停止
+                timerText.setText('Time\'s up!');
+            }
+        }
+        function updateText() {
+            if (waitnowtext.text.includes("相手を待機中")) {
+                if (tenten > 4) {
+                    tenten = 1;
+                }
+                var tmp = "";
+                for (var i = 1; i < tenten; i++) {
+                    tmp = tmp + "・";
+                }
+                waitnowtext.setText(`相手を待機中${tmp}`);
+                tenten++;
+            }
+        }
+        var before1 = 0;
+        var before2 = 0;
+        var after1 = 0;
+        var after2 = 0;
+        var keep = 0;
+        var back = 0;
+        var play = 0;
+        var draw = 0;
+        function winnercheck(p1, p2) {
+            draw = 0;
+            mycards.push(p1);
+            yourcards.push(p2);
+            if (p1 == 4 || p2 == 4) {
+                keep = p1;
+                p1 = p2;
+                p2 = keep;
+            }
+            if (before1 != 8) {
+                if (before2 == 6) {
+                    after1 = p1 - 1;
+                    play = 1;
+                }
+                if (before2 == 9) {
+                    back = 1;
+                    play = 1;
+                }
+                if (p2 == 1) {
+                    if (p1 == 10) {
+                        after2 = 11;
+                        back = 0;
+                    }
+                }
+                if (p2 == 5) {
+                    draw = 1;
+                    play = 1;
+                }
+            }
+            if (play == 0) {
+                after2 = after2 + p2;
+            }
+            play = 0;
+
+
+
+            if (before2 != 8) {
+                if (before1 == 6) {
+                    after2 = p2 - 1;
+                    play = 1;
+                }
+                if (before1 == 9) {
+                    back = 1;
+                    play = 1;
+                }
+                if (p1 == 1) {
+                    if (p2 == 10) {
+                        after1 = 11;
+                        back = 0;
+                    }
+                }
+                if (p1 == 5) {
+                    draw = 1;
+                    play = 1;
+                }
+            }
+            if (play == 0) {
+                after1 = after1 + p1;
+            }
+            play = 0;
+
+            console.log(after1);
+            console.log(after2);
+
+            if (back == 1) {
+                after1 = 11 - after1;
+                after2 = 11 - after2;
+            }
+            if (draw == 1) {
+                after1 = 0;
+                after2 = 0;
+            }
+            before1 = p1;
+            before2 = p2;
+            if (after1 > after2) {
+                after1 = 0;
+                after2 = 0;
+                return "1p";
+            }
+            if (after1 < after2) {
+                after1 = 0;
+                after2 = 0;
+                return "2p";
+            }
+            if (after1 == after2) {
+                after1 = 0;
+                after2 = 0;
+                return "draw";
+            }
+        }
+        async function runModel() {
+            let tmp = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            let daserucard = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+            if (before1 == 3 && whoiswinner == "1p") {
+                var randtmp = Math.floor(Math.random() * 9 + 1);
+                while (yourcards.includes(randtmp)) {
+                    randtmp = Math.floor(Math.random() * 9 + 1);
+                }
+                return randtmp;
+            } else {
+                if (before1 == 2) {
+                    if (before2 - 2 <= i && before2 + 2 >= i) {
+                        dashcard = [before2 - 2, before2 - 1, before2 + 1, before2 + 2];
+                    }
+                }
+                for (var i = 0; yourcards.length > i; i++) {
+                    tmp[yourcards[i] - 1] = 1;
+                    tmp[mycards[i] + 9] = 1;
+                }
+                const model = await tf.loadLayersModel('tfjs_model/model.json');
+                const input = tf.tensor2d([tmp]);
+                const output = model.predict(input);
+                const result = output.arraySync()[0];
+                var ruisekikakuritu = 0;
+                console.log(result);
+                for (var i = 0; result.length > i; i++) {
+                    if (!yourcards.includes(i + 1) && daserucard.includes(i + 1)) {
+                        ruisekikakuritu = ruisekikakuritu + result[i];
+                    }
+                }
+                var ransuuutmp = Math.random() * ruisekikakuritu;
+                console.log(ruisekikakuritu);
+                console.log(ransuuutmp);
+                var ruisekikakuritu = 0;
+                for (var i = 0; result.length > i; i++) {
+                    if (!yourcards.includes(i + 1) && daserucard.includes(i + 1)) {
+                        ruisekikakuritu = ruisekikakuritu + result[i];
+                        if (ruisekikakuritu > ransuuutmp) {
+                            console.log(i);
+                            return i + 1;
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
